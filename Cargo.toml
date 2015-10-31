@@ -1,0 +1,8 @@
+[package]
+name = "monty_hall"
+version = "0.1.0"
+authors = ["Andrew Crites <acrites@mobiquityinc.com>"]
+
+[dependencies]
+
+rand = "0.3.0"
