@@ -4,7 +4,30 @@ extern crate num_cpus;
 use std::io;
 use rand::Rng;
 use std::thread;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, RwLock};
+use std::fmt;
+
+#[derive(Clone)]
+pub struct ConcurrentCounter(Arc<RwLock<usize>>);
+
+impl ConcurrentCounter {
+    pub fn new(val: usize) -> Self {
+        ConcurrentCounter(Arc::new(RwLock::new(val)))
+    }
+
+    pub fn inc(&self) {
+        let mut counter = self.0.write().unwrap();
+        *counter = *counter + 1;
+    }
+
+}
+
+impl fmt::Display for ConcurrentCounter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let counter = self.0.read().unwrap();
+        write!(f, "{}", *counter)
+    }
+}
 
 fn make_selection() -> String {
     loop {
@@ -32,16 +55,14 @@ fn main() {
 
     let selection = make_selection();
 
-    let fail = Arc::new(Mutex::new(0));
-    let suc = Arc::new(Mutex::new(0));
-
-    let (tx, rx) = mpsc::channel();
+    let fail = ConcurrentCounter::new(0);
+    let suc = ConcurrentCounter::new(0);
 
     let cpus = num_cpus::get() - 1;
     let mut threads = vec![];
 
     for _ in (0..cpus) {
-        let (selection, suc, fail, tx) = (selection.clone(), suc.clone(), fail.clone(), tx.clone());
+        let (selection, suc, fail) = (selection.clone(), suc.clone(), fail.clone());
         threads.push(thread::spawn(move || {
             for _ in (0..1_000_000 / cpus) {
                 let mut doors = ['g', 'g', 'g'];
@@ -89,15 +110,12 @@ fn main() {
                 }
 
                 if 'c' == doors[final_choice] {
-                    let mut suc = suc.lock().unwrap();
-                    *suc += 1;
+                    suc.inc();
                 }
                 else {
-                    let mut fail = fail.lock().unwrap();
-                    *fail += 1;
+                    fail.inc();
                 }
             }
-            tx.send((suc, fail));
         }));
     }
 
@@ -105,7 +123,5 @@ fn main() {
         let _ = thread.join();
     }
 
-    let (suc, fail) = rx.recv().unwrap();
-
-    println!("suc: {:?}, fail: {:?}", suc, fail);
+    println!("suc: {}, fail: {}", suc, fail);
 }
